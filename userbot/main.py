@@ -15,6 +15,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("userbot")
 
+PREFIX = os.environ.get("PREFIX", ".")
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
 
@@ -33,8 +34,9 @@ def load_modules():
         module_name = f"modules.{filename[:-3]}"
         try:
             mod = importlib.import_module(module_name)
-            # Передаём клиент в модуль, если он ожидает его
-            if hasattr(mod, "init"):
+            if hasattr(mod, "register"):
+                mod.register(client, PREFIX)
+            elif hasattr(mod, "init"):
                 mod.init(client)
             log.info(f"✅ Загружен модуль: {filename[:-3]}")
             loaded += 1
@@ -52,6 +54,7 @@ async def main():
 
     me = await client.get_me()
     log.info(f"Авторизован как: {me.first_name} (@{me.username})")
+    log.info(f"Префикс: {PREFIX}")
     log.info("Юзербот запущен и слушает события.")
 
     await client.run_until_disconnected()

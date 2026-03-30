@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "aiohttp>=3.13.4",
+    "gtts>=2.5.4",
+    "pillow>=12.1.1",
     "python-dotenv>=1.2.2",
+    "pytz>=2026.1.post1",
     "telethon>=1.42.0",
 ]

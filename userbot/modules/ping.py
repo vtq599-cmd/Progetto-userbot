@@ -1,17 +1,10 @@
-"""
-Модуль: ping
-Команда: .ping — проверка работы бота
-"""
-
+import time
 from telethon import events
 
-_client = None
-
-
-def init(client):
-    global _client
-    _client = client
-
-    @client.on(events.NewMessage(outgoing=True, pattern=r"\.ping$"))
+def register(client, prefix):
+    @client.on(events.NewMessage(pattern=rf"\{prefix}ping$", outgoing=True))
     async def ping_handler(event):
-        await event.edit("🏓 Pong!")
+        start = time.time()
+        msg = await event.edit("🏓 Pong!")
+        elapsed = round((time.time() - start) * 1000, 2)
+        await msg.edit(f"🏓 Pong! `{elapsed}ms`")
