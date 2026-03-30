@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "python-3.11"]
 
 [[artifacts]]
 id = "artifacts/api-server"
@@ -17,6 +17,26 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Userbot"
+
+[[workflows.workflow]]
+name = "Userbot"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd userbot && python main.py"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
@@ -24,3 +44,13 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[nix]
+channel = "stable-25_05"
+packages = ["openssl"]
+
+[userenv]
+
+[userenv.shared]
+API_ID = "34927042"
+API_HASH = "bd98dc898cfd58513d1f0ec1e3e4b6af"
