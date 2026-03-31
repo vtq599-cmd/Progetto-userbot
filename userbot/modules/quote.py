@@ -18,14 +18,15 @@ def register(client, prefix):
             last = getattr(sender, "last_name", "") or ""
             name = f"{first} {last}".strip() or str(sender.id)
 
+            # Исправлено: правильный метод скачивания аватара
             avatar_b64 = None
             try:
-                photos = await client.get_profile_photos(sender.id, limit=1)
-                if photos:
-                    buf = io.BytesIO()
-                    await client.download_media(photos[0], buf)
-                    buf.seek(0)
-                    avatar_b64 = base64.b64encode(buf.read()).decode()
+                buf = io.BytesIO()
+                await client.download_profile_photo(sender.id, file=buf)
+                buf.seek(0)
+                raw = buf.read()
+                if raw:
+                    avatar_b64 = base64.b64encode(raw).decode()
             except Exception:
                 pass
 
@@ -36,11 +37,9 @@ def register(client, prefix):
                 "format": "webp",
                 "backgroundColor": "#1b1429",
                 "width": 512,
-                "height": 512,
                 "scale": 2,
                 "messages": [{
                     "entities": [],
-                    "media": {"mediaType": ""},
                     "avatar": True,
                     "from": {
                         "id": sender.id,
@@ -48,7 +47,6 @@ def register(client, prefix):
                         "photo": {
                             "url": f"data:image/jpeg;base64,{avatar_b64}" if avatar_b64 else ""
                         },
-                        "type": "private",
                     },
                     "text": text,
                     "replyMessage": {},
@@ -62,12 +60,17 @@ def register(client, prefix):
                     timeout=aiohttp.ClientTimeout(total=30),
                 ) as r:
                     if r.status != 200:
-                        raise Exception(f"HTTP {r.status}")
+                        body = await r.text()
+                        raise Exception(f"HTTP {r.status}: {body[:300]}")
                     data = await r.json()
 
-            img_b64 = data.get("result", {}).get("image")
+            # Исправлено: API может вернуть в разных форматах
+            img_b64 = (
+                data.get("result", {}).get("image")
+                or data.get("image")
+            )
             if not img_b64:
-                raise Exception("API не вернул изображение")
+                raise Exception(f"Нет изображения в ответе: {str(data)[:200]}")
 
             file = io.BytesIO(base64.b64decode(img_b64))
             file.name = "quote.webp"
