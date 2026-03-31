@@ -52,5 +52,5 @@ packages = ["freetype", "lcms2", "libimagequant", "libjpeg", "libtiff", "libwebp
 [userenv]
 
 [userenv.shared]
-API_ID = "34927042"
-API_HASH = "bd98dc898cfd58513d1f0ec1e3e4b6af"
+API_ID = "123456"
+API_HASH = "bd43..."
