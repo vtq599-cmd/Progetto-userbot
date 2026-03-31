@@ -17,13 +17,12 @@ def register(client, prefix):
         try:
             async with aiohttp.ClientSession() as s:
                 async with s.post(
-                    "https://api.cobalt.tools/api/json",
+                    "https://api.cobalt.tools/",
                     json={
                         "url": url,
-                        "vQuality": "720",
-                        "filenamePattern": "basic",
-                        "isAudioOnly": False,
-                        "disableMetadata": True,
+                        "videoQuality": "720",
+                        "filenameStyle": "basic",
+                        "downloadMode": "auto",
                     },
                     headers={
                         "Accept": "application/json",
@@ -32,13 +31,14 @@ def register(client, prefix):
                     timeout=aiohttp.ClientTimeout(total=30),
                 ) as r:
                     if r.status != 200:
-                        raise Exception(f"HTTP {r.status}")
+                        body = await r.text()
+                        raise Exception(f"HTTP {r.status}: {body[:200]}")
                     data = await r.json()
 
             status = data.get("status")
             if status == "error":
-                raise Exception(data.get("text", "Неизвестная ошибка"))
-            elif status in ("redirect", "stream"):
+                raise Exception(data.get("error", {}).get("code", "Неизвестная ошибка"))
+            elif status in ("redirect", "stream", "tunnel"):
                 video_url = data.get("url")
             elif status == "picker":
                 video_url = data["picker"][0]["url"]
