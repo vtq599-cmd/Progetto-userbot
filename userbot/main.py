@@ -27,18 +27,16 @@ log = logging.getLogger("userbot")
 
 PREFIX = os.environ.get("BOT_PREFIX", ".")
 
-client_options = {}
-if PROXY_SERVER:
-    if not PROXY_PORT or not PROXY_SECRET:
-        raise ValueError(
-            "Если задан PROXY_SERVER, также укажите PROXY_PORT и PROXY_SECRET"
-        )
-    client_options.update(
-        proxy=(PROXY_SERVER, PROXY_PORT, PROXY_SECRET),
-        connection=ConnectionTcpMTProxyRandomizedIntermediate,
-    )
-
-client = TelegramClient(SESSION_NAME, API_ID, API_HASH, **client_options)
+client = TelegramClient(
+    SESSION_NAME,
+    API_ID,
+    API_HASH,
+    proxy=(PROXY_SERVER, PROXY_PORT, PROXY_SECRET),
+    connection=ConnectionTcpMTProxyRandomizedIntermediate,
+    connection_retries=None,
+    retry_delay=5,
+    auto_reconnect=True,
+)
 
 
 def load_modules():
@@ -81,7 +79,7 @@ def print_qr(url: str):
 
 
 async def login_via_qr() -> bool:
-    log.info("Запускаю QR-вход...")
+    log.info("Запускаю QR-вход через MTProxy...")
 
     try:
         qr_login = await client.qr_login()
@@ -116,17 +114,18 @@ async def login_via_qr() -> bool:
         await client.sign_in(password=password)
         return True
     except Exception:
-        log.exception("Ошибка QR-входа")
+        log.exception("Ошибка QR-входа через MTProxy")
         return False
 
 
 async def login():
     if await client.is_user_authorized():
+        log.info("Найдена сохранённая Telegram-сессия")
         return
 
     method = os.environ.get("LOGIN_METHOD", "qr").lower()
     if method == "phone":
-        log.info("Вход по номеру телефона...")
+        log.info("Вход по номеру телефона через MTProxy...")
         await client.start()
         return
 
@@ -137,11 +136,9 @@ async def login():
 
 
 async def main():
-    log.info("Запускаю юзербота...")
-    if PROXY_SERVER:
-        log.info("MTProxy: %s:%s", PROXY_SERVER, PROXY_PORT)
-    else:
-        log.info("MTProxy отключён; использую прямое подключение")
+    log.info("Запускаю юзербота через MTProxy %s:%s", PROXY_SERVER, PROXY_PORT)
+    log.info("Сессия: %s", SESSION_NAME)
+    log.info("Префикс: %s", PREFIX)
 
     load_modules()
     await client.connect()
@@ -149,7 +146,6 @@ async def main():
 
     me = await client.get_me()
     log.info("Авторизован как: %s (@%s)", me.first_name, me.username)
-    log.info("Префикс: %s", PREFIX)
     log.info("Юзербот запущен и слушает события.")
     await client.run_until_disconnected()
 
