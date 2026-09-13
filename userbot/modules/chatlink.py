@@ -20,10 +20,7 @@ def register(client, prefix):
                 )
                 return
 
-            try:
-                result = await client(ExportInviteRequest(channel=event.chat_id))
-            except Exception:
-                result = await client(ExportChatInviteRequest(peer=event.chat_id))
+            result = await client(ExportChatInviteRequest(peer=event.chat_id))
 
             await event.edit(
                 f"🔗 **{title}**\n\n"
