@@ -15,4 +15,4 @@ if [[ ! -f userbot/.env ]]; then
     echo "Создан userbot/.env — заполни API_ID, API_HASH и данные MTProxy."
 fi
 
-echo "Установка завершена. Запусти: ./termux-run.sh"
+echo "Установка завершена. Запусти: bash termux-run.sh"
