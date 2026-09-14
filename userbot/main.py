@@ -7,12 +7,16 @@ import sys
 
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
-from telethon.network.connection import ConnectionTcpMTProxyRandomizedIntermediate
+from telethon.network.connection import (
+    ConnectionTcpMTProxyIntermediate,
+    ConnectionTcpMTProxyRandomizedIntermediate,
+)
 
 from config import (
     API_HASH,
     API_ID,
     PROXY_PORT,
+    PROXY_PROTOCOL,
     PROXY_SECRET,
     PROXY_SERVER,
     SESSION_NAME,
@@ -27,12 +31,18 @@ log = logging.getLogger("userbot")
 
 PREFIX = os.environ.get("BOT_PREFIX", ".")
 
+connection_class = (
+    ConnectionTcpMTProxyRandomizedIntermediate
+    if PROXY_PROTOCOL == "randomized"
+    else ConnectionTcpMTProxyIntermediate
+)
+
 client = TelegramClient(
     SESSION_NAME,
     API_ID,
     API_HASH,
     proxy=(PROXY_SERVER, PROXY_PORT, PROXY_SECRET),
-    connection=ConnectionTcpMTProxyRandomizedIntermediate,
+    connection=connection_class,
     connection_retries=None,
     retry_delay=5,
     auto_reconnect=True,
@@ -136,12 +146,17 @@ async def login():
 
 
 async def main():
-    log.info("Запускаю юзербота через MTProxy %s:%s", PROXY_SERVER, PROXY_PORT)
+    log.info("Запускаю юзербота через MTProxy %s:%s (%s)", PROXY_SERVER, PROXY_PORT, PROXY_PROTOCOL)
     log.info("Сессия: %s", SESSION_NAME)
     log.info("Префикс: %s", PREFIX)
 
     load_modules()
-    await client.connect()
+    try:
+        await client.connect()
+    except ValueError as exc:
+        if "readexactly size can not be less than zero" in str(exc):
+            raise RuntimeError("MTProxy handshake failed; check PROXY_SECRET, host/port, and PROXY_PROTOCOL.") from exc
+        raise
     await login()
 
     me = await client.get_me()
