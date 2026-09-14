@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 pkg update -y
 pkg install -y python python-pillow git ffmpeg
-python -m pip install --upgrade pip
+python -m pip --version
 python -m pip install -r requirements-termux.txt
 
 if [[ ! -f userbot/.env ]]; then
