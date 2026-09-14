@@ -38,6 +38,20 @@ if not 1 <= PROXY_PORT <= 65535:
 
 PROXY_SECRET = _required("PROXY_SECRET")
 
+PROXY_PROTOCOL = os.environ.get("PROXY_PROTOCOL", "auto").strip().lower()
+if PROXY_PROTOCOL not in {"auto", "intermediate", "randomized"}:
+    raise ValueError(
+        "PROXY_PROTOCOL должен быть auto, intermediate или randomized"
+    )
+
+if PROXY_PROTOCOL == "auto":
+    is_dd_secret = (
+        len(PROXY_SECRET) == 34
+        and PROXY_SECRET[:2].lower() == "dd"
+        and all(char in "0123456789abcdefABCDEF" for char in PROXY_SECRET)
+    )
+    PROXY_PROTOCOL = "randomized" if is_dd_secret else "intermediate"
+
 # Keep the session next to this file so it is covered by userbot/.gitignore.
 SESSION_NAME = os.environ.get(
     "SESSION_NAME",
