@@ -1,7 +1,9 @@
+import re
+
 from telethon import events
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}purge$", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}purge$", outgoing=True))
     async def purge_handler(event):
         reply = await event.get_reply_message()
         if not reply:
@@ -14,7 +16,7 @@ def register(client, prefix):
         if ids:
             await client.delete_messages(event.chat_id, ids)
 
-    @client.on(events.NewMessage(pattern=rf"\{prefix}purgeme ?(\d*)", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}purgeme(?:\s+(\d+))?$", outgoing=True))
     async def purgeme_handler(event):
         count = int(event.pattern_match.group(1) or 10)
         me = await client.get_me()

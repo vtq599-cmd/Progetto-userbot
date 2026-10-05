@@ -1,8 +1,9 @@
 import time
+import re
 from telethon import events
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}ping$", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}ping$", outgoing=True))
     async def ping_handler(event):
         start = time.time()
         msg = await event.edit("🏓 Pong!")

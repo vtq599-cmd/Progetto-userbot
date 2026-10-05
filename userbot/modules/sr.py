@@ -1,73 +1,43 @@
-import aiohttp
+import asyncio
+import re
+import time
+
 from telethon import events
 
-_active = False
-_replied = set()
+from modules.ai import text_answer
 
-async def _get_ai_reply(my_name, user_name, text):
-    async with aiohttp.ClientSession() as s:
-        async with s.post(
-            "https://api.pollinations.ai/v1/chat/completions",
-            json={
-                "model": "openai",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": (
-                            f"Ты — {my_name} в Telegram. Сейчас ты недоступен. "
-                            "Отвечай кратко и вежливо, что тебя нет и ты ответишь позже. "
-                            "Отвечай на том же языке что и собеседник. Не более 2 предложений."
-                        ),
-                    },
-                    {"role": "user", "content": f"{user_name} написал: {text}"},
-                ],
-            },
-            headers={"Content-Type": "application/json"},
-            timeout=aiohttp.ClientTimeout(total=15),
-        ) as r:
-            data = await r.json()
-    return data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+_active = False
+_last_reply = {}
+
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}sr ?(.*)", outgoing=True))
-    async def sr_cmd(event):
-        global _active, _replied
-        arg = event.pattern_match.group(1).strip().lower()
-
-        if arg.startswith("on"):
-            if _active:
-                return await event.edit("🤖 SmartReply уже включён")
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}sr(?:\s+(on|off))?$", outgoing=True))
+    async def sr_command(event):
+        global _active
+        action = (event.pattern_match.group(1) or "").lower()
+        if action == "on":
             _active = True
-            _replied.clear()
-            await event.edit("🤖 **SmartReply включён**\nAI будет отвечать на сообщения в ЛС")
-
-        elif arg.startswith("off"):
-            if not _active:
-                return await event.edit("😴 SmartReply уже выключён")
+            return await event.edit("🤖 SmartReply **включён**")
+        if action == "off":
             _active = False
-            await event.edit("😴 **SmartReply выключён**")
+            return await event.edit("😴 SmartReply **выключен**")
+        status = "включён" if _active else "выключен"
+        await event.edit(f"ℹ️ SmartReply: **{status}**\n`.sr on` / `.sr off`")
 
-        else:
-            status = "включён 🤖" if _active else "выключён 😴"
-            await event.edit(f"ℹ️ SmartReply: **{status}**\n`.sr on` / `.sr off`")
-
-    @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
+    @client.on(events.NewMessage(incoming=True, func=lambda event: event.is_private))
     async def sr_watcher(event):
-        global _replied
-        if not _active or event.out:
+        if not _active or not event.text:
             return
-        sender_id = event.sender_id
-        if sender_id in _replied or not event.text:
+        now = time.monotonic()
+        if now - _last_reply.get(event.sender_id, 0) < 60:
             return
+        _last_reply[event.sender_id] = now
         try:
-            me = await client.get_me()
-            my_name = me.first_name or "User"
-            sender = await event.get_sender()
-            user_name = getattr(sender, "first_name", "") or str(sender_id)
-            reply = await _get_ai_reply(my_name, user_name, event.text)
-            if not reply:
-                return
-            _replied.add(sender_id)
+            reply = await text_answer(
+                f"Ответь кратко и вежливо, что я временно недоступен и отвечу позже. "
+                f"Сообщение собеседника: {event.text}"
+            )
             await client.send_message(event.chat_id, f"🤖 {reply}")
         except Exception:
-            pass
+            _last_reply.pop(event.sender_id, None)

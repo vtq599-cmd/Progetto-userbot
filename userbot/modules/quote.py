@@ -1,8 +1,9 @@
 from telethon import events
 import asyncio
+import re
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}q$", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}q$", outgoing=True))
     async def q_handler(event):
         reply = await event.get_reply_message()
         if not reply:

@@ -1,4 +1,6 @@
 import asyncio
+import re
+
 from telethon import events
 from telethon.tl.types import ChannelParticipantsSearch
 from telethon.tl.functions.channels import GetParticipantsRequest
@@ -6,7 +8,7 @@ from telethon.tl.functions.channels import GetParticipantsRequest
 _running = False
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}tagall ?([\s\S]*)", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}tagall(?:\s+([\s\S]*))?$", outgoing=True))
     async def tagall_handler(event):
         global _running
         if not (event.is_group or event.is_channel):
@@ -62,8 +64,3 @@ def register(client, prefix):
         finally:
             _running = False
 
-    @client.on(events.NewMessage(pattern=rf"\{prefix}untagall$", outgoing=True))
-    async def untagall_handler(event):
-        global _running
-        _running = False
-        await event.edit("🛑 **Тег остановлен**")

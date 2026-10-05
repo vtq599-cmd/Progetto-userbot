@@ -1,76 +1,65 @@
-import aiohttp
+import asyncio
+import glob
 import os
+import re
+import sys
 import tempfile
+
 from telethon import events
 
+
+async def download_video(url, output_template):
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "yt_dlp",
+        "--no-playlist",
+        "--format",
+        "bestvideo*+bestaudio/best",
+        "--merge-output-format",
+        "mp4",
+        "--output",
+        output_template,
+        url,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=900)
+    except asyncio.TimeoutError as exc:
+        process.kill()
+        await process.wait()
+        raise RuntimeError("Таймаут скачивания (15 минут)") from exc
+    if process.returncode:
+        error = (stderr or stdout).decode(errors="replace")[-600:]
+        raise RuntimeError(error or f"yt-dlp завершился с кодом {process.returncode}")
+
+
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}yt ?(.*)", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}yt(?:\s+(.+))$", outgoing=True))
     async def yt_handler(event):
         url = event.pattern_match.group(1).strip()
-        if not url:
-            await event.edit("❌ Укажи ссылку\nПример: `.yt https://youtu.be/xxx`")
-            return
-
-        await event.edit("⏳ **Скачиваю видео с YouTube...**")
-
-        tmp_path = None
+        await event.edit("⏳ Скачиваю видео в максимальном доступном качестве...")
+        tmp_dir = tempfile.mkdtemp()
+        output_template = os.path.join(tmp_dir, "video.%(ext)s")
         try:
-            async with aiohttp.ClientSession() as s:
-                async with s.post(
-                    "https://api.cobalt.tools/",
-                    json={
-                        "url": url,
-                        "videoQuality": "720",
-                        "filenameStyle": "basic",
-                        "downloadMode": "auto",
-                    },
-                    headers={
-                        "Accept": "application/json",
-                        "Content-Type": "application/json",
-                    },
-                    timeout=aiohttp.ClientTimeout(total=30),
-                ) as r:
-                    if r.status != 200:
-                        body = await r.text()
-                        raise Exception(f"HTTP {r.status}: {body[:200]}")
-                    data = await r.json()
-
-            status = data.get("status")
-            if status == "error":
-                raise Exception(data.get("error", {}).get("code", "Неизвестная ошибка"))
-            elif status in ("redirect", "stream", "tunnel"):
-                video_url = data.get("url")
-            elif status == "picker":
-                video_url = data["picker"][0]["url"]
-            else:
-                raise Exception(f"Неожиданный статус: {status}")
-
-            if not video_url:
-                raise Exception("Не удалось получить ссылку на видео")
-
-            tmp_path = tempfile.mktemp(suffix=".mp4")
-            async with aiohttp.ClientSession() as s:
-                async with s.get(video_url, timeout=aiohttp.ClientTimeout(total=300)) as r:
-                    with open(tmp_path, "wb") as f:
-                        while True:
-                            chunk = await r.content.read(65536)
-                            if not chunk:
-                                break
-                            f.write(chunk)
-
-            if os.path.getsize(tmp_path) > 50 * 1024 * 1024:
-                return await event.edit(f"❌ Файл слишком большой\n🔗 [Прямая ссылка]({video_url})")
-
-            await event.delete()
-            await client.send_file(
-                event.chat_id,
-                tmp_path,
-                caption=f"🎬 **YouTube**\n🔗 {url}",
-                supports_streaming=True
+            await download_video(url, output_template)
+            candidates = glob.glob(os.path.join(tmp_dir, "video.*"))
+            if not candidates:
+                raise RuntimeError("yt-dlp не создал видеофайл")
+            tmp = next(
+                (filename for filename in candidates if filename.endswith(".mp4")),
+                candidates[0],
             )
-
-        except Exception as e:
-            await event.edit(f"❌ {e}")
+            if os.path.getsize(tmp) > 2 * 1024 * 1024 * 1024:
+                raise RuntimeError("Видео больше лимита Telegram в 2 ГБ")
+            await event.delete()
+            await client.send_file(event.chat_id, tmp, supports_streaming=True)
+        except FileNotFoundError:
+            await event.edit("❌ Не найден yt-dlp. Повтори установку Termux-зависимостей.")
+        except Exception as exc:
+            await event.edit(f"❌ YouTube: {exc}")
         finally:
-            if tmp_path and os.path.exists(tmp_path):
-                os.remove(tmp_path)
+            for filename in glob.glob(os.path.join(tmp_dir, "*")):
+                os.unlink(filename)
+            os.rmdir(tmp_dir)

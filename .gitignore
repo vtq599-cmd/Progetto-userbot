@@ -52,4 +52,5 @@ Thumbs.db
 *.session
 *.session-journal
 .pythonlibs/
+.venv/
 __pycache__/

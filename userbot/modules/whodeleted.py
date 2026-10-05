@@ -1,66 +1,82 @@
+import re
+import asyncio
+
 from telethon import events
+from telethon.tl.functions.channels import GetAdminLogRequest
+from telethon.tl.types import ChannelAdminLogEventsFilter
+
+from modules.history import message_link
+
 
 _active = False
-_cache = {}
+
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}whodeleted ?(.*)", outgoing=True))
-    async def whodeleted_cmd(event):
-        global _active
-        arg = event.pattern_match.group(1).strip().lower()
-        if arg == "on":
-            _active = True
-            await event.edit("✅ **WhoDeleted включён**")
-        elif arg == "off":
-            _active = False
-            await event.edit("❌ **WhoDeleted выключён**")
-        else:
-            status = "включён ✅" if _active else "выключён ❌"
-            await event.edit(f"ℹ️ Статус: **{status}**")
+    global _active
 
-    @client.on(events.NewMessage(incoming=True))
-    async def cache_messages(event):
-        if not _active:
-            return
-        try:
-            chat_id = event.chat_id
-            if chat_id not in _cache:
-                _cache[chat_id] = {}
-            sender_name = None
-            if event.sender:
-                sender_name = (
-                    f"{getattr(event.sender, 'first_name', '') or ''} "
-                    f"{getattr(event.sender, 'last_name', '') or ''}".strip()
-                )
-            _cache[chat_id][event.id] = {
-                "text": event.text or "[медиа]",
-                "sender_id": event.sender_id,
-                "sender": sender_name,
-            }
-        except Exception:
-            pass
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}whodeleted(?:\s+(on|off))?$", outgoing=True))
+    async def command(event):
+        global _active
+        action = (event.pattern_match.group(1) or "").lower()
+        if action == "on":
+            _active = True
+        elif action == "off":
+            _active = False
+        status = "включён" if _active else "выключен"
+        await event.edit(f"🗑 WhoDeleted: **{status}**")
 
     @client.on(events.MessageDeleted())
-    async def on_deleted(event):
-        if not _active:
+    async def deleted(event):
+        if not _active or event.chat_id is None:
             return
-        try:
-            chat_id = event.chat_id
-            if not chat_id or chat_id not in _cache:
-                return
-            for msg_id in event.deleted_ids:
-                cached = _cache.get(chat_id, {}).pop(msg_id, None)
-                if not cached:
-                    continue
-                sender = cached["sender"] or f"ID:{cached['sender_id']}"
-                text = (cached["text"] or "")[:200]
-                me = await client.get_me()
-                await client.send_message(
-                    me.id,
-                    f"🗑 **Удалённое сообщение**\n\n"
-                    f"👤 **Автор:** {sender}\n"
-                    f"💬 **Текст:** `{text}`\n"
-                    f"📍 **Чат:** `{chat_id}`"
+        await asyncio.sleep(0.15)
+        me = await client.get_me()
+        for message_id in event.deleted_ids:
+            record = {
+                "message_id": message_id,
+                "sender_id": None,
+                "text": "Содержимое недоступно в локальном кэше",
+            }
+            try:
+                from modules.history import get_deleted
+                records = get_deleted(event.chat_id, 100)
+                record = next(
+                    (item for item in reversed(records) if item["message_id"] == message_id),
+                    record,
                 )
-        except Exception:
-            pass
+            except Exception:
+                pass
+            deleter = "неизвестно (Telegram не сообщил)"
+            try:
+                log = await client(
+                    GetAdminLogRequest(
+                        channel=await event.get_input_chat(),
+                        q="",
+                        max_id=0,
+                        min_id=0,
+                        limit=50,
+                        events_filter=ChannelAdminLogEventsFilter(delete=True),
+                    )
+                )
+                for entry in log.events:
+                    deleted_message = getattr(entry.action, "message", None)
+                    if getattr(deleted_message, "id", None) == message_id:
+                        actor = await client.get_entity(entry.user_id)
+                        deleter = (
+                            f"{getattr(actor, 'first_name', '') or ''} "
+                            f"{getattr(actor, 'last_name', '') or ''}".strip()
+                            or str(entry.user_id)
+                        )
+                        break
+            except Exception:
+                pass
+            link = await message_link(client, event.chat_id, record["message_id"])
+            await client.send_message(
+                me.id,
+                f"🗑 **Удалено сообщение**\n"
+                f"👤 Автор ID: `{record.get('sender_id') or 'неизвестно'}`\n"
+                f"🧹 Удалил: {deleter}\n"
+                f"💬 {record['text'][:500]}\n"
+                f"🔗 {link or 'ссылка недоступна'}",
+                parse_mode=None,
+            )

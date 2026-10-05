@@ -29,7 +29,10 @@ logging.basicConfig(
 )
 log = logging.getLogger("userbot")
 
-PREFIX = os.environ.get("BOT_PREFIX", ".")
+PREFIX = os.environ.get("BOT_PREFIX", "7").strip() or "7"
+if PREFIX == ".":
+    # Migrate the default from older .env files to the requested numeric prefix.
+    PREFIX = "7"
 
 connection_class = (
     ConnectionTcpMTProxyRandomizedIntermediate

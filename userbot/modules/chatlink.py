@@ -1,8 +1,10 @@
+import re
+
 from telethon import events
 from telethon.tl.functions.messages import ExportChatInviteRequest
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}chatlink$", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}chatlink$", outgoing=True))
     async def chatlink_handler(event):
         if not (event.is_group or event.is_channel):
             await event.edit("❌ Используй в группе или канале")

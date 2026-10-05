@@ -1,7 +1,9 @@
+import re
+
 from telethon import events
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}alive", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}alive$", outgoing=True))
     async def alive_handler(event):
         me = await client.get_me()
         text = (
