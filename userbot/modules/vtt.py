@@ -1,69 +1,52 @@
-import aiohttp
 import os
+import re
 import tempfile
+
+import aiohttp
 from telethon import events
 
-WIT_TOKEN = "JVDPWQIW6XHWJBNBDWB5EVLLFHCQKBQX"
+
+WIT_TOKEN = os.environ.get("WIT_TOKEN", "").strip()
+
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}vtt$", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}vtt$", outgoing=True))
     async def vtt_handler(event):
         reply = await event.get_reply_message()
-        if not reply:
-            await event.edit("❌ Ответьте на голосовое сообщение")
-            return
-
-        is_voice = (
+        mime = getattr(getattr(reply, "file", None), "mime_type", None)
+        if not reply or not (
             reply.voice
             or reply.audio
-            or (reply.document and reply.document.mime_type and "audio" in reply.document.mime_type)
-        )
-        if not is_voice:
-            await event.edit("❌ Это не голосовое/аудио сообщение")
-            return
+            or (reply.document and mime and mime.startswith("audio/"))
+        ):
+            return await event.edit("❌ Ответь на голосовое или аудиофайл.")
+        if not WIT_TOKEN:
+            return await event.edit("❌ Для `.vtt` добавь WIT_TOKEN в userbot/.env.")
 
-        await event.edit("🎙️ **Расшифровываю...**")
-        tmp_path = None
+        await event.edit("🎙️ Расшифровываю...")
+        tmp = tempfile.mktemp(suffix=".ogg")
         try:
-            tmp_path = tempfile.mktemp(suffix=".ogg")
-            await reply.download_media(tmp_path)
-
-            with open(tmp_path, "rb") as f:
-                audio_bytes = f.read()
-
-            mime = "audio/ogg"
-            if reply.audio and reply.audio.mime_type:
-                mime = reply.audio.mime_type
-            elif reply.document and reply.document.mime_type:
-                mime = reply.document.mime_type
-
-            async with aiohttp.ClientSession() as s:
-                async with s.post(
+            await reply.download_media(tmp)
+            with open(tmp, "rb") as audio:
+                payload = audio.read()
+            mime = mime or "audio/ogg"
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
                     "https://api.wit.ai/speech?v=20220622",
                     headers={
                         "Authorization": f"Bearer {WIT_TOKEN}",
                         "Content-Type": mime,
                     },
-                    data=audio_bytes,
-                    timeout=aiohttp.ClientTimeout(total=30),
-                ) as r:
-                    data = await r.json()
-
+                    data=payload,
+                    timeout=aiohttp.ClientTimeout(total=90),
+                ) as response:
+                    data = await response.json(content_type=None)
+                    if response.status != 200:
+                        raise RuntimeError(data.get("error", f"HTTP {response.status}"))
             text = (data.get("text") or "").strip()
-            if not text:
-                return await event.edit("🤷 Не удалось распознать речь")
-
-            sender = reply.sender
-            name = ""
-            if sender:
-                name = f"{getattr(sender, 'first_name', '') or ''} {getattr(sender, 'last_name', '') or ''}".strip()
-
-            await event.edit(
-                f"🎙️ **Расшифровка{' от ' + name if name else ''}:**\n\n{text}"
-            )
-
-        except Exception as e:
-            await event.edit(f"❌ {e}")
+            await event.edit(f"🎙️ **Расшифровка:**\n\n{text}" if text else "🤷 Речь не распознана.")
+        except Exception as exc:
+            await event.edit(f"❌ VTT: {exc}")
         finally:
-            if tmp_path and os.path.exists(tmp_path):
-                os.remove(tmp_path)
+            if os.path.exists(tmp):
+                os.unlink(tmp)

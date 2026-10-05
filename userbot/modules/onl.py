@@ -1,9 +1,13 @@
 import asyncio
+import re
+
 from telethon import events
 from telethon.tl.functions.account import UpdateStatusRequest
 
+
 _task = None
 _active = False
+
 
 def register(client, prefix):
     global _task, _active
@@ -14,30 +18,31 @@ def register(client, prefix):
                 await client(UpdateStatusRequest(offline=False))
             except Exception:
                 pass
-            await asyncio.sleep(60)
+            await asyncio.sleep(50)
 
-    @client.on(events.NewMessage(pattern=rf"\{prefix}onl", outgoing=True))
+    @client.on(
+        events.NewMessage(
+            pattern=rf"^{re.escape(prefix)}onl(?:\s+(on|off))?$",
+            outgoing=True,
+        )
+    )
     async def onl_handler(event):
         global _task, _active
-        args = event.raw_text.split(maxsplit=1)
-        arg = args[1].strip().lower() if len(args) > 1 else ""
-
-        if arg == "on":
+        action = (event.pattern_match.group(1) or "").lower()
+        if action == "on":
             if _active:
                 return await event.edit("✅ Онлайн уже включён")
             _active = True
-            _task = asyncio.ensure_future(online_loop())
-            await event.edit("✅ Бесконечный онлайн **включён**")
-
-        elif arg == "off":
+            _task = asyncio.create_task(online_loop())
+            return await event.edit("✅ Онлайн **включён**")
+        if action == "off":
             if not _active:
-                return await event.edit("❌ Онлайн уже выключён")
+                return await event.edit("❌ Онлайн уже выключен")
             _active = False
             if _task:
                 _task.cancel()
                 _task = None
             await client(UpdateStatusRequest(offline=True))
-            await event.edit("❌ Бесконечный онлайн **выключён**")
-
-        else:
-            await event.edit("❓ Используй: `.onl on` или `.onl off`")
+            return await event.edit("❌ Онлайн **выключен**")
+        status = "включён" if _active else "выключен"
+        await event.edit(f"ℹ️ Онлайн: **{status}**\n`.onl on` / `.onl off`")

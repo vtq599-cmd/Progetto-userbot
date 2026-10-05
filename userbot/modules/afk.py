@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from telethon import events
 
 _afk = False
@@ -7,16 +8,16 @@ _afk_since = None
 _notified = set()
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}afk ?(.*)", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}afk(?:\s+([\s\S]*))?$", outgoing=True))
     async def set_afk(event):
         global _afk, _afk_reason, _afk_since, _notified
         _afk = True
-        _afk_reason = event.pattern_match.group(1).strip() or "Нет причины"
+        _afk_reason = (event.pattern_match.group(1) or "").strip() or "Нет причины"
         _afk_since = datetime.now()
         _notified = set()
         await event.edit(f"😴 **AFK включён**\nПричина: {_afk_reason}")
 
-    @client.on(events.NewMessage(pattern=rf"\{prefix}unafk", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}unafk$", outgoing=True))
     async def unset_afk(event):
         global _afk
         if not _afk:

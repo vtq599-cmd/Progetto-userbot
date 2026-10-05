@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import tempfile
 from telethon import events
@@ -10,7 +11,7 @@ def parse_time(t):
     return int(t)
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}cut ?(.*)", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}cut(?:\s+(.*))?$", outgoing=True))
     async def cut_handler(event):
         reply = await event.get_reply_message()
         if not reply:
@@ -25,7 +26,7 @@ def register(client, prefix):
             await event.edit("❌ Это не аудио/голосовое сообщение")
             return
 
-        args = event.pattern_match.group(1).strip().split()
+        args = (event.pattern_match.group(1) or "").strip().split()
         if len(args) < 2:
             await event.edit("❌ Укажи начало и конец:\n`.cut 0:30 1:00`")
             return

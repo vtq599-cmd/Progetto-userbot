@@ -1,10 +1,11 @@
 import os
+import re
 import subprocess
 import tempfile
 from telethon import events
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}vnote$", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}vnote$", outgoing=True))
     async def vnote_handler(event):
         reply = await event.get_reply_message()
         if not reply:

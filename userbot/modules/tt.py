@@ -1,12 +1,13 @@
 import aiohttp
 import os
+import re
 import tempfile
 from telethon import events
 
 def register(client, prefix):
-    @client.on(events.NewMessage(pattern=rf"\{prefix}tt ?(.*)", outgoing=True))
+    @client.on(events.NewMessage(pattern=rf"^{re.escape(prefix)}tt(?:\s+(.+))?$", outgoing=True))
     async def tt_handler(event):
-        url = event.pattern_match.group(1).strip()
+        url = (event.pattern_match.group(1) or "").strip()
         if not url:
             await event.edit("❌ Укажи ссылку на TikTok видео\nПример: `.tt https://vm.tiktok.com/xxx`")
             return
@@ -44,8 +45,8 @@ def register(client, prefix):
                                 break
                             f.write(chunk)
 
-            if os.path.getsize(tmp_path) > 50 * 1024 * 1024:
-                return await event.edit(f"❌ Файл слишком большой\n🔗 [Прямая ссылка]({video_url})")
+            if os.path.getsize(tmp_path) > 2 * 1024 * 1024 * 1024:
+                return await event.edit("❌ Видео превышает лимит Telegram в 2 ГБ.")
 
             await event.delete()
             await client.send_file(

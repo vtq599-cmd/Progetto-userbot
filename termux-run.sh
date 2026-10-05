@@ -14,6 +14,11 @@ set -a
 source userbot/.env
 set +a
 
+# Older copies used a dot as the default; switch them to the requested prefix.
+if [[ "${BOT_PREFIX:-}" == "." ]]; then
+    export BOT_PREFIX=7
+fi
+
 : "${API_ID:?Заполни API_ID в userbot/.env}"
 : "${API_HASH:?Заполни API_HASH в userbot/.env}"
 : "${PROXY_SERVER:?Заполни PROXY_SERVER в userbot/.env}"
